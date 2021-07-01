@@ -1,0 +1,116 @@
+#! /usr/bin/perl
+
+use warnings; use strict;
+
+my %none = ();
+my %monthnames = validnames(qw/january february march april may june july august september october november december/);
+my %daynames = validnames(qw/sunday monday tuesday wednesday thursday friday saturday/);
+
+my @crontab;
+if (@ARGV) {
+    @crontab = @ARGV;
+} else {
+    push @crontab, join('/', '/var/spool/cron/crontabs', $ENV{USER});
+}
+my $exitstat = 0;
+foreach (@crontab) {
+    if (-r $_) {
+	$exitstat = 1 if !chkcrontab($_);
+    } else {
+        warn "$0: Cannot read $_\n";
+	$exitstat = 1;
+    }
+}
+exit $exitstat;
+
+sub chkcrontab {
+    my ($pathname) = @_;
+
+    my $retval = 1;
+    if (open(my $crontab, '<', $pathname)) {
+        my $lineno = -3;	# The stored crontab contains three lines not counted by "crontab -e"
+	while (<$crontab>) {
+	    $lineno++;
+	    if (/^\s*#/) {
+		# print STDERR "COMMENT: $_";
+		next;
+	    }
+	    # print STDERR "MUSTCHECK: $_";
+	    my @field = split(/\s+/, $_);
+	    shift @field if length($field[0]) == 0;
+	    if (!check($field[0], \%none)) {
+	        print STDERR "$lineno: bad minutes specification: $field[0]\n";
+		$retval = 0;
+	    }
+	    if (!check($field[1], \%none)) {
+	        print STDERR "$lineno: bad hours specification: $field[1]\n";
+		$retval = 0;
+	    }
+	    if (!check($field[2], \%none)) {
+	        print STDERR "$lineno: bad day of month specification: $field[2]\n";
+		$retval = 0;
+	    }
+	    if (!check($field[3], \%monthnames)) {
+	        print STDERR "$lineno: bad month specification: $field[3]\n";
+		$retval = 0;
+	    }
+	    if (!check($field[4], \%daynames)) {
+	        print STDERR "$lineno: bad day of week specification: $field[4]\n";
+		$retval = 0;
+	    }
+	    if (! -e $field[5]) {
+	        print STDERR "$lineno: \"$field[5]\" does not exist\n";
+		$retval = 0;
+	    } elsif (! -x $field[5]) {
+	        print STDERR "$lineno: \"$field[5]\" is not executable\n";
+		$retval = 0;
+	    }
+	}
+    } else {
+        warn "$0: Cannot open $pathname for reading: $!\n";
+	$retval = 0;
+    }
+
+    return $retval;
+}
+
+sub check {
+    my ($spec, $nameref) = @_;
+
+    # split comma-seperated specifications.
+    foreach (split(/,/, $spec)) {
+	my ($base, $step, $tail) = split(/\//);
+
+	# Only one step specification is allowed
+	return 0 if defined $tail;
+
+	# The step must be purely numeric
+	if (defined $step) {
+	    return 0 if $step !~ m|^\d+|;
+	}
+
+	# each part must be either a number without a step or a range ('* is a valid range) optionally followed by a step
+	if ($base =~ m|^\d+$|) {
+	    return 0 if defined $step;
+	} elsif (!exists $nameref->{lc $base}) {
+	    if ($base =~ m|^(\d+)-(\d+)|) {
+	        return 0 if $1 > $2;
+	    } elsif ($base ne '*') {
+	        return 0;
+	    }
+	}
+    }
+
+    return 1;
+}
+
+sub validnames {
+    my %list;
+
+    foreach (@_) {
+        $list{$_} = 1;
+	$list{substr($_, 0, 3)} = 1;
+    }
+
+    return %list;
+}
