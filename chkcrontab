@@ -16,9 +16,10 @@ if (@ARGV) {
             } else {
         	warn "$0: Failed to read $_: $!\n";
             }
-    } else {
-        warn "$0: Cannot read $_\n";
-	$exitstat = 1;
+	} else {
+            warn "$0: Cannot read $_\n";
+	    $exitstat = 1;
+	}
     }
 } elsif (open(my $crontab, 'crontab -l |')) {
     $exitstat = 1 if !chkcrontab($crontab, 0); 
